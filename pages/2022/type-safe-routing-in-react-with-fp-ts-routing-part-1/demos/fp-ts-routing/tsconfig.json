@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "jsx": "react",
+    "sourceMap": true
+  }
+}

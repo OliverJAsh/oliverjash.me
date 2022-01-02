@@ -1,0 +1,511 @@
+---
+title: Type-safe routing in React with `fp-ts-routing` (part 1)
+date: 2022-01-19
+---
+
+- [Introduction](#introduction)
+- [React Router](#react-router)
+- [`fp-ts-routing`](#fp-ts-routing)
+  - [Defining the router](#defining-the-router)
+  - [Using `fp-ts-routing` in React](#using-fp-ts-routing-in-react)
+  - [Using `fp-ts-routing` in Express](#using-fp-ts-routing-in-express)
+  - [To be continued](#to-be-continued)
+
+## Introduction
+
+Among the most popular "routing" libraries in the JavaScript ecosystem are [React Router] and [Express]. Both of these libraries gained popularity before the TypeScript boom, and subsequently type safety is more of an afterthought. This poses the question: what would a routing library look like if it was designed with type safety in mind?
+
+React Router and Express are built on top of [`path-to-regexp`], a library that makes it easy to define routes as "pathname pattern strings", for example `"/search/:query"`. In TypeScript we want to extract a type to describe the "params" that appear within one of these pathname pattern strings. For example, in the pattern `"/search/:query"` we want to extract the type `{ query: string }`. This is possible using [template literal types](https://twitter.com/danvdk/status/1301707026507198464), however this TypeScript feature is not powerful enough to support the full range of syntax that may be allowed in a pathname pattern string such as optional params.
+
+There is also another big problem with `path-to-regexp`: despite the fact that the library's name mentions "path", this library only really helps to match against the _pathname_ rather than the full path. The full path may include query parameters (aka search parameters), and we would like to match against these as well because they often form part of the definition for a route. For example, if we have a "search" route, we might have some query parameters that should be used to filter the search results.
+
+<aside>
+
+`path-to-regexp` can match query parameters but only in a very limited fashion, i.e. query parameters must appear in a fixed order and it's not possible to express optional query parameters.
+
+</aside>
+
+[`fp-ts-routing`] solves both of these problems.
+
+In this first part of this two-part blog post series I'm going to demonstrate how to create a simple React application that uses `fp-ts-routing`. To showcase the issues concerning type safety I will start with an example application that uses React Router, and then I will rewrite the same example application to use `fp-ts-routing`.
+
+In part 2 I will demonstrate how to handle query parameters as well as diving in to some of the more advanced features of `fp-ts-routing` such as the `type` function and custom `io-ts` types.
+
+<aside>
+
+All of the code in this blog post can be found [on GitHub](https://github.com/OliverJAsh/oliverjash.me/tree/main/pages/2022/type-safe-routing-in-react-with-fp-ts-routing/demos).
+
+</aside>
+
+## React Router
+
+<aside>
+
+[Code for this section can be found inside the `react-router` demo folder on GitHub](https://github.com/OliverJAsh/oliverjash.me/tree/main/pages/2022/type-safe-routing-in-react-with-fp-ts-routing-part-1/demos/react-router).
+
+</aside>
+
+Our example application will have two routes, "home" and "search".
+
+We start by defining a pathname pattern for each route.
+
+```twoslash include react-router
+import * as React from "react";
+import * as ReactDOM from "react-dom";
+import * as ReactRouterDOM from "react-router-dom";
+
+const paths = {
+    Home: "/",
+    Search: "/search/:query",
+};
+```
+
+```tsx twoslash {5-8}
+// @include: react-router
+```
+
+To build a link for each route, we can pass the route's pathname pattern to React Router's `generatePath` function:
+
+```tsx twoslash {8-14}
+// @include: react-router
+// ---cut---
+const Nav: React.FC = () => (
+  <nav>
+    <ul>
+      <li>
+        <ReactRouterDOM.Link to={paths.Home}>Home</ReactRouterDOM.Link>
+      </li>
+      <li>
+        <ReactRouterDOM.Link
+          to={ReactRouterDOM.generatePath(paths.Search, {
+            query: "dogs and cats",
+          })}
+        >
+          Search
+        </ReactRouterDOM.Link>
+      </li>
+      <li>
+        <ReactRouterDOM.Link to="/abcdef">
+          Invalid link (to test "not found")
+        </ReactRouterDOM.Link>
+      </li>
+    </ul>
+  </nav>
+);
+```
+
+To render a component when the URL matches one of our routes, we can use React Router's `Route` component:
+
+```tsx twoslash {7}
+// @include: react-router
+declare const Nav: React.FC;
+declare const Home: React.FC;
+declare const Search: React.FC;
+// ---cut---
+const App = () => (
+  <>
+    <Nav />
+    <hr />
+    <ReactRouterDOM.Routes>
+      <ReactRouterDOM.Route path={paths.Home} element={<Home />} />
+      <ReactRouterDOM.Route path={paths.Search} element={<Search />} />
+      <ReactRouterDOM.Route path="*" element={<div>Not found</div>} />
+    </ReactRouterDOM.Routes>
+  </>
+);
+```
+
+Inside of the `Search` component, we can read the params for the search route using React Router's `useParams` hook:
+
+```tsx twoslash {2}
+// @include: react-router
+// ---cut---
+const Search: React.FC = () => {
+  const { query } = ReactRouterDOM.useParams();
+  //      ^?
+
+  return (
+    <div>
+      <h1>Search</h1>
+      <dl>
+        <dt>Query</dt>
+        <dd>{query}</dd>
+      </dl>
+    </div>
+  );
+};
+```
+
+This works but unfortunately it's not type-safe. The param `query` has type `string | undefined` but it should have type `string` because it must exist in order for the search route's pathname pattern to match and for `Route` to render this component. Moreover, if we updated the pathname pattern to change the name of the `query` param or even remove it, this code would not generate a type error, because `useParams` doesn't know the names of the params which appear inside the pathname pattern for this route. This means it's very likely that we would forget to apply the same change inside the component.
+
+```tsx twoslash
+// @include: react-router
+// ---cut---
+// ❌ No error! ☹️
+const { i, may, not, exist } = ReactRouterDOM.useParams();
+```
+
+## `fp-ts-routing`
+
+To introduce [`fp-ts-routing`], let's migrate our pathname pattern for the search route (`"/search/:query"`).
+
+```tsx twoslash
+import * as P from "fp-ts-routing";
+
+// Equivalent to `/search/:query` in `path-to-regexp`.
+const searchMatch = P.lit("search").then(P.str("query")).then(P.end);
+```
+
+In `fp-ts-routing` we define each part (or "component") of the path using functions:
+
+- `lit` (short for literal): takes any string to be matched exactly
+- `str` (short for string): takes a parameter name and it will match any non-empty string
+
+<aside>
+
+There are other functions such as `int` (short for integer) and `type` (parse any [`io-ts`] type) which I will demonstrate in the part 2 of this blog post series.
+
+</aside>
+
+To join the parts together we can use the `then` method.
+
+If we inspect the type of `searchMatch` we can see it has successfully inferred the type of our params:
+
+```tsx twoslash
+import * as P from "fp-ts-routing";
+
+// Equivalent to `/search/:query` in `path-to-regexp`.
+const searchMatch = P.lit("search").then(P.str("query")).then(P.end);
+//    ^?
+```
+
+In `fp-ts-routing`, a `Match` is an object that contains two properties: `parser` and `formatter`.
+
+A `Parser` _parses_ a string into a params object, if the string matches. For example:
+
+```ts twoslash
+import * as P from "fp-ts-routing";
+import * as O from "fp-ts/Option";
+
+const searchMatch = P.lit("search").then(P.str("query")).then(P.end);
+
+const parseRoute = (path: string) => {
+  const route = P.Route.parse(path);
+  return P.parse(searchMatch.parser.map(O.some), route, O.none);
+};
+
+parseRoute("/search/dogs%20and%20cats");
+// @log: { _tag: 'Some', value: { query: 'dogs and cats' } }
+
+parseRoute("/foo");
+// @log: { _tag: 'None' }
+```
+
+A `Formatter` converts the other way—it _formats_ a params object into a string. For example:
+
+```ts twoslash
+import * as P from "fp-ts-routing";
+
+const searchMatch = P.lit("search").then(P.str("query")).then(P.end);
+
+P.format(searchMatch.formatter, { query: "dogs and cats " });
+// @log: "/search/dogs%20and%20cats"
+```
+
+<aside>
+
+`fp-ts-routing` is a "bidirectional routing library" because it creates parsers (`string -> MyRoute`) and formatters (`MyRoute -> string`) from a single route definition (`Match`).
+
+</aside>
+
+Now let's migrate our pathname pattern for the home route (`"/"`):
+
+```ts twoslash
+import * as P from "fp-ts-routing";
+
+// Equivalent to `/` in `path-to-regexp`.
+const homeMatch = P.end;
+
+// Equivalent to `/search/:query` in `path-to-regexp`.
+const searchMatch = P.lit("search").then(P.str("query")).then(P.end);
+```
+
+### Defining the router
+
+Now we have defined `Match`s for all of our routes, we need to define a _router_ so we can parse any path string to the closest matching route. Firstly, we need to define a [tagged union] to represent a parsed route.
+
+```twoslash include fp-ts-routing-prep
+// @filename: Route.ts
+export type Home = {};
+
+export type Search = {
+    query: string;
+};
+
+// @filename: RouteUnion.ts
+import * as Route from "./Route";
+
+export type RouteUnion =
+    | ({ _tag: "Home" } & Route.Home)
+    | ({ _tag: "Search" } & Route.Search);
+
+export const Home = (): RouteUnion => ({ _tag: "Home" });
+
+export const Search = (value: Route.Search): RouteUnion => ({
+    _tag: "Search",
+    ...value,
+});
+```
+
+```ts twoslash
+// @include: fp-ts-routing-prep
+```
+
+<aside>
+
+I've defined this tagged union manually but in practice I would usually recommend using a small helper library like [`@unsplash/sum-types`] which provides sugar syntax to automatically create constructors and match functions.
+
+</aside>
+
+To create our router, we need to lift each route's parser to our tagged union type and then we can use `alt` to compose them all together.
+
+The router is just another parser which parses a string into our tagged union type, `RouteUnion`.
+
+```twoslash include fp-ts-routing
+// @filename: Router.ts
+import * as P from "fp-ts-routing";
+import * as O from "fp-ts/Option";
+import * as Route from "./Route";
+import * as RouteUnion from "./RouteUnion";
+
+// Equivalent to `/` in `path-to-regexp`.
+export const homeMatch: P.Match<Route.Home> = P.end;
+
+// Equivalent to `/search/:query` in `path-to-regexp`.
+export const searchMatch: P.Match<Route.Search> = P.lit("search")
+    .then(P.str("query"))
+    .then(P.end);
+
+const router: P.Parser<RouteUnion.RouteUnion> = P.zero<RouteUnion.RouteUnion>()
+    .alt(homeMatch.parser.map(RouteUnion.Home))
+    .alt(searchMatch.parser.map(RouteUnion.Search));
+
+export const parseRoute = (path: string): O.Option<RouteUnion.RouteUnion> => {
+    const route = P.Route.parse(path);
+    return P.parse(router.map(O.some), route, O.none);
+};
+```
+
+```ts twoslash
+// @include: fp-ts-routing-prep
+// ---cut---
+// @include: fp-ts-routing
+```
+
+Example usage:
+
+```ts twoslash
+// @include: fp-ts-routing-prep
+// @include: fp-ts-routing
+// ---cut---
+parseRoute("/");
+// @log: { _tag: 'Some', value: { _tag: 'Home' } }
+
+parseRoute("/search/dogs%20and%20cats");
+// @log: { _tag: 'Some', value: { _tag: 'Search', query: 'dogs and cats' } }
+
+parseRoute("/foo");
+// @log: { _tag: 'None' }
+```
+
+### Using `fp-ts-routing` in React
+
+<aside>
+
+[Code for this section can be found inside the `fp-ts-routing` demo folder on GitHub](https://github.com/OliverJAsh/oliverjash.me/tree/main/pages/2022/type-safe-routing-in-react-with-fp-ts-routing-part-1/demos/fp-ts-routing).
+
+</aside>
+
+To build a link for each route, we no longer need to use React Router's `generatePath` function. Instead, we can use our formatters to create them:
+
+```twoslash include fp-ts-routing-react
+// @filename: main.tsx
+import * as P from "fp-ts-routing";
+import { pipe } from "fp-ts/function";
+import * as O from "fp-ts/Option";
+import * as History from "history";
+import * as React from "react";
+import * as ReactRouterDOM from "react-router-dom";
+import * as Route from "./Route";
+import * as Router from "./Router";
+import * as RouteUnion from "./RouteUnion";
+
+const Nav: React.FC = () => (
+    <nav>
+        <ul>
+            <li>
+                <ReactRouterDOM.Link
+                    to={P.format(Router.homeMatch.formatter, {})}
+                >
+                    Home
+                </ReactRouterDOM.Link>
+            </li>
+            <li>
+                <ReactRouterDOM.Link
+                    to={P.format(Router.searchMatch.formatter, {
+                        query: "dogs and cats",
+                    })}
+                >
+                    Search
+                </ReactRouterDOM.Link>
+            </li>
+            <li>
+                <ReactRouterDOM.Link to="/abcdef">
+                    Invalid link (to test "not found")
+                </ReactRouterDOM.Link>
+            </li>
+        </ul>
+    </nav>
+);
+```
+
+```tsx twoslash
+// @include: fp-ts-routing-prep
+// @include: fp-ts-routing
+// ---cut---
+// @include: fp-ts-routing-react
+```
+
+We no longer need to use React Router's `Route` component either—we can just use our router:
+
+```tsx twoslash
+// @include: fp-ts-routing-prep
+// @include: fp-ts-routing
+// @include: fp-ts-routing-react
+// ---cut---
+const useRoute = () => {
+  const { pathname, search } = ReactRouterDOM.useLocation();
+  const path = History.createPath({ pathname, search });
+  const routeOption = Router.parseRoute(path);
+  return routeOption;
+};
+
+const Home: React.FC<Route.Home> = () => (
+  <div>
+    <h1>Home</h1>
+  </div>
+);
+
+const Search: React.FC<Route.Search> = ({ query }) => (
+  <div>
+    <h1>Search</h1>
+    <dl>
+      <dt>Query</dt>
+      <dd>{query}</dd>
+    </dl>
+  </div>
+);
+
+const RouteComponent: React.FC<{ route: RouteUnion.RouteUnion }> = ({
+  route,
+}) => {
+  switch (route._tag) {
+    case "Home":
+      return <Home />;
+    case "Search":
+      return <Search {...route} />;
+  }
+};
+
+const App = () => {
+  const routeOption = useRoute();
+  return (
+    <>
+      <Nav />
+      <hr />
+      {pipe(
+        routeOption,
+        O.fold(
+          () => <div>Not found</div>,
+          (route) => <RouteComponent route={route} />
+        )
+      )}
+    </>
+  );
+};
+```
+
+Unlike our original example which used pathname patterns and React Router's `Route` component, this version is type-safe. The `Search` component receives the parsed params as props, directly from the route parser.
+
+Whilst the routing is now all handled by `fp-ts-routing`, you may have noticed that we are still using React Router, specifically the `Link` component and the `useLocation` hook. It would be trivial to roll our own versions of `Link` and `useLocation` but with tree shaking I don't think there's any harm in continuing to use React Router for this. In any case, if you're curious how this might work, see [this demo](https://github.com/OliverJAsh/oliverjash.me/tree/main/pages/2022/type-safe-routing-in-react-with-fp-ts-routing-part-1/demos/fp-ts-routing-without-react-router).
+
+### Using `fp-ts-routing` in Express
+
+<aside>
+
+[Code for this section can be found inside the `express-fp-ts-routing` demo folder on GitHub](https://github.com/OliverJAsh/oliverjash.me/tree/main/pages/2022/type-safe-routing-in-react-with-fp-ts-routing-part-1/demos/express-fp-ts-routing).
+
+</aside>
+
+Like React, Express also uses `path-to-regexp`:
+
+```tsx twoslash
+import * as Express from "express";
+
+const app = Express.default();
+
+// Pathname pattern string here (passed to `path-to-regexp` under the hood)
+app.get("/search/:query", (req, res, next) => {
+  res.send(`Search query: ${req.params.query}`);
+});
+
+app.listen(3000);
+```
+
+Instead of passing pathname patterns to Express, we can just pass `*` to catch all requests and then handle the routing ourselves inside of the request handler:
+
+```tsx twoslash
+import * as Express from "express";
+import * as P from "fp-ts-routing";
+import { pipe } from "fp-ts/function";
+import * as O from "fp-ts/Option";
+
+const app = Express.default();
+
+const searchMatch = P.lit("search").then(P.str("query")).then(P.end);
+
+const parseRoute = (path: string) => {
+  const route = P.Route.parse(path);
+  return P.parse(searchMatch.parser.map(O.some), route, O.none);
+};
+
+app.get("*", (req, res) => {
+  pipe(
+    req.originalUrl,
+    parseRoute,
+    O.fold(
+      () => {
+        res.status(404);
+        res.send("Not found");
+      },
+      ({ query }) => {
+        res.send(`Search query: ${query}`);
+      }
+    )
+  );
+});
+
+app.listen(3000);
+```
+
+### To be continued
+
+That's all for part 1! Part 2 coming soon.
+
+[`path-to-regexp`]: https://github.com/pillarjs/path-to-regexp
+[react router]: https://reactrouter.com/
+[express]: https://expressjs.com/
+[`fp-ts-routing`]: https://github.com/gcanti/fp-ts-routing
+[tagged union]: https://mariusschulz.com/blog/tagged-union-types-in-typescript
+[`@unsplash/sum-types`]: https://github.com/unsplash/sum-types
+[`io-ts`]: https://github.com/gcanti/io-ts
