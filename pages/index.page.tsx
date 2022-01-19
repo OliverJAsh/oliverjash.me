@@ -22,7 +22,8 @@ export const getStaticProps: GetStaticProps<Props> = () => {
     unknown,
     ReadonlyArray<Post.T>
   > = pipe(
-    globbyTaskFn("pages/**/index.page.mdx"),
+    Post.filenameGlob,
+    globbyTaskFn,
     TaskEither.chainW(flow(RA.map(Post.fromFilename), TaskEither.sequenceArray))
   );
 

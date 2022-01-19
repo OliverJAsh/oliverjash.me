@@ -9,6 +9,8 @@ import * as O from "types/Option";
 import * as MatterData from "./MatterData";
 
 const filenameRegExp = new RegExp("^pages/(.+)/index.page.mdx$");
+export const filenameGlob = "pages/**/index.page.mdx";
+
 const createPathFromFilename = (filename: string): string =>
   pipe(
     filename.match(filenameRegExp),
