@@ -72,6 +72,7 @@ const Home: NextPage<Props> = ({ posts }) => (
         <ul>
           {pipe(
             ExternalPost.all,
+            RA.sort(ExternalPost.dateOrdDesc),
             RA.map((post) => (
               <li key={post.href}>
                 <DateComponent date={post.date} />{" "}
