@@ -53,7 +53,7 @@ const Search: React.FC = () => {
   );
 };
 
-const App = () => (
+const App: React.FC = () => (
   <>
     <Nav />
     <hr />

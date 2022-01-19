@@ -67,7 +67,7 @@ const RouteComponent: React.FC<{ route: RouteUnion.RouteUnion }> = ({
   }
 };
 
-const App = () => {
+const App: React.FC = () => {
   const routeOption = useRoute();
   return (
     <>

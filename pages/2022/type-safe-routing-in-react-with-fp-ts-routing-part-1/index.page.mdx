@@ -102,7 +102,7 @@ declare const Nav: React.FC;
 declare const Home: React.FC;
 declare const Search: React.FC;
 // ---cut---
-const App = () => (
+const App: React.FC = () => (
   <>
     <Nav />
     <hr />
@@ -417,7 +417,7 @@ const RouteComponent: React.FC<{ route: RouteUnion.RouteUnion }> = ({
   }
 };
 
-const App = () => {
+const App: React.FC = () => {
   const routeOption = useRoute();
   return (
     <>
