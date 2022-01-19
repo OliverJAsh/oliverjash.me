@@ -7,8 +7,20 @@ type MatterData = {
 };
 export type T = MatterData;
 
-export const fromString = (s: string): MatterData =>
-  pipe(s, fm, (matter) => matter.data as MatterData);
+type WithContent = {
+  data: MatterData;
+  content: string;
+};
+
+export const fromStringWithContent = (s: string): WithContent =>
+  pipe(
+    s,
+    fm,
+    (matter): WithContent => ({
+      data: matter.data as MatterData,
+      content: matter.content,
+    })
+  );
 
 export const fromFile = (file: Buffer): MatterData =>
-  pipe(file.toString(), fromString);
+  pipe(file.toString(), fromStringWithContent, (t) => t.data);
