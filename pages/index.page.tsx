@@ -1,7 +1,7 @@
 import { flow, identity, pipe } from "fp-ts/function";
 import * as RA from "fp-ts/ReadonlyArray";
 import { globby } from "globby";
-import type { GetStaticProps, NextPage } from "next";
+import type { GetStaticProps, GetStaticPropsResult, NextPage } from "next";
 import Head from "next/head";
 import Link from "next/link";
 import { DateComponent } from "../components/DateComponent";
@@ -32,11 +32,13 @@ export const getStaticProps: GetStaticProps<Props> = () => {
     TaskEither.map(flow(RA.sort(Post.dateOrdDesc), RA.map(Post.serialize))),
     TaskEither.unsafeUnwrap,
     (postsPromise) =>
-      postsPromise.then((posts) => ({
-        props: {
-          posts,
-        },
-      }))
+      postsPromise.then(
+        (posts): GetStaticPropsResult<Props> => ({
+          props: {
+            posts,
+          },
+        })
+      )
   );
 };
 
