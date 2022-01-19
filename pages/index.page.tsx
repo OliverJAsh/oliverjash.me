@@ -49,13 +49,16 @@ const Home: NextPage<Props> = ({ posts }) => (
       <section>
         <h1>Posts</h1>
         <ul>
-          {posts.map(
-            flow(Post.deserialize, (post) => (
-              <li key={post.path}>
-                <DateComponent date={post.date} />{" "}
-                <Link href={post.path}>{post.title}</Link>
-              </li>
-            ))
+          {pipe(
+            posts,
+            RA.map(
+              flow(Post.deserialize, (post) => (
+                <li key={post.path}>
+                  <DateComponent date={post.date} />{" "}
+                  <Link href={post.path}>{post.title}</Link>
+                </li>
+              ))
+            )
           )}
         </ul>
       </section>
@@ -63,12 +66,15 @@ const Home: NextPage<Props> = ({ posts }) => (
       <section>
         <h1>Posts elsewhere on the internet</h1>
         <ul>
-          {ExternalPost.all.map((post) => (
-            <li key={post.href}>
-              <DateComponent date={post.date} />{" "}
-              <a href={post.href}>{post.title}</a>
-            </li>
-          ))}
+          {pipe(
+            ExternalPost.all,
+            RA.map((post) => (
+              <li key={post.href}>
+                <DateComponent date={post.date} />{" "}
+                <a href={post.href}>{post.title}</a>
+              </li>
+            ))
+          )}
         </ul>
       </section>
     </main>
