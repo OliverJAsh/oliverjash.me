@@ -6,6 +6,7 @@ type ExternalPost = {
   href: string;
   date: Date;
 };
+export type T = ExternalPost;
 
 export const dateOrdAsc = Ord.contramap((post: ExternalPost) => post.date)(
   Date.Ord
@@ -77,3 +78,21 @@ export const all: ReadonlyArray<ExternalPost> = [
     date: new globalThis.Date(2015, 10, 4),
   },
 ];
+
+export type Serialized = {
+  href: string;
+  title: string;
+  date: string;
+};
+
+export const serialize = (post: ExternalPost): Serialized => ({
+  href: post.href,
+  title: post.title,
+  date: post.date.toISOString(),
+});
+
+export const deserialize = (post: Serialized): ExternalPost => ({
+  href: post.href,
+  title: post.title,
+  date: new globalThis.Date(post.date),
+});
