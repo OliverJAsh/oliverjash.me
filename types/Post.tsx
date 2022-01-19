@@ -1,5 +1,7 @@
 import * as A from "fp-ts/Array";
+import * as Date from "fp-ts/Date";
 import { flow, pipe } from "fp-ts/function";
+import * as Ord from "fp-ts/Ord";
 import * as TaskEither from "fp-ts/TaskEither";
 import * as fs from "fs";
 import * as Nullish from "types/Nullish";
@@ -23,6 +25,9 @@ type Post = {
 };
 
 export type T = Post;
+
+export const dateOrdAsc = Ord.contramap((post: Post) => post.date)(Date.Ord);
+export const dateOrdDesc = pipe(dateOrdAsc, Ord.reverse);
 
 export const fromFilenameAndMatterData = ({
   filename,
@@ -67,5 +72,5 @@ export const serialize = (post: Post): Serialized => ({
 export const deserialize = (post: Serialized): Post => ({
   path: post.path,
   title: post.title,
-  date: new Date(post.date),
+  date: new globalThis.Date(post.date),
 });

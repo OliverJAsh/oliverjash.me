@@ -28,7 +28,7 @@ export const getStaticProps: GetStaticProps<Props> = () => {
 
   return pipe(postsEitherTask, TaskEither.unsafeUnwrap, (postsPromise) =>
     postsPromise.then(
-      flow(RA.map(Post.serialize), (posts) => ({
+      flow(RA.sort(Post.dateOrdDesc), RA.map(Post.serialize), (posts) => ({
         props: {
           posts,
         },
