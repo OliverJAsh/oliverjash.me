@@ -30,15 +30,14 @@ export const getStaticProps: GetStaticProps<Props> = () => {
   return pipe(
     postsEitherTask,
     TaskEither.map(flow(RA.sort(Post.dateOrdDesc), RA.map(Post.serialize))),
-    TaskEither.unsafeUnwrap,
-    (postsPromise) =>
-      postsPromise.then(
-        (posts): GetStaticPropsResult<Props> => ({
-          props: {
-            posts,
-          },
-        })
-      )
+    TaskEither.map(
+      (posts): GetStaticPropsResult<Props> => ({
+        props: {
+          posts,
+        },
+      })
+    ),
+    TaskEither.unsafeUnwrap
   );
 };
 
