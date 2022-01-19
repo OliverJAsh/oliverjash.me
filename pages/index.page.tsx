@@ -27,14 +27,16 @@ export const getStaticProps: GetStaticProps<Props> = () => {
     TaskEither.chainW(flow(RA.map(Post.fromFilename), TaskEither.sequenceArray))
   );
 
-  return pipe(postsEitherTask, TaskEither.unsafeUnwrap, (postsPromise) =>
-    postsPromise.then(
-      flow(RA.sort(Post.dateOrdDesc), RA.map(Post.serialize), (posts) => ({
+  return pipe(
+    postsEitherTask,
+    TaskEither.map(flow(RA.sort(Post.dateOrdDesc), RA.map(Post.serialize))),
+    TaskEither.unsafeUnwrap,
+    (postsPromise) =>
+      postsPromise.then((posts) => ({
         props: {
           posts,
         },
       }))
-    )
   );
 };
 
