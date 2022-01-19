@@ -55,8 +55,8 @@ import * as ReactDOM from "react-dom";
 import * as ReactRouterDOM from "react-router-dom";
 
 const paths = {
-    Home: "/",
-    Search: "/search/:query",
+  Home: "/",
+  Search: "/search/:query",
 };
 ```
 
@@ -239,21 +239,21 @@ Now we have defined `Match`s for all of our routes, we need to define a _router_
 export type Home = {};
 
 export type Search = {
-    query: string;
+  query: string;
 };
 
 // @filename: RouteUnion.ts
 import * as Route from "./Route";
 
 export type RouteUnion =
-    | ({ _tag: "Home" } & Route.Home)
-    | ({ _tag: "Search" } & Route.Search);
+  | ({ _tag: "Home" } & Route.Home)
+  | ({ _tag: "Search" } & Route.Search);
 
 export const Home = (): RouteUnion => ({ _tag: "Home" });
 
 export const Search = (value: Route.Search): RouteUnion => ({
-    _tag: "Search",
-    ...value,
+  _tag: "Search",
+  ...value,
 });
 ```
 
@@ -283,16 +283,16 @@ export const homeMatch: P.Match<Route.Home> = P.end;
 
 // Equivalent to `/search/:query` in `path-to-regexp`.
 export const searchMatch: P.Match<Route.Search> = P.lit("search")
-    .then(P.str("query"))
-    .then(P.end);
+  .then(P.str("query"))
+  .then(P.end);
 
 const router: P.Parser<RouteUnion.RouteUnion> = P.zero<RouteUnion.RouteUnion>()
-    .alt(homeMatch.parser.map(RouteUnion.Home))
-    .alt(searchMatch.parser.map(RouteUnion.Search));
+  .alt(homeMatch.parser.map(RouteUnion.Home))
+  .alt(searchMatch.parser.map(RouteUnion.Search));
 
 export const parseRoute = (path: string): O.Option<RouteUnion.RouteUnion> => {
-    const route = P.Route.parse(path);
-    return P.parse(router.map(O.some), route, O.none);
+  const route = P.Route.parse(path);
+  return P.parse(router.map(O.some), route, O.none);
 };
 ```
 
@@ -341,31 +341,29 @@ import * as Router from "./Router";
 import * as RouteUnion from "./RouteUnion";
 
 const Nav: React.FC = () => (
-    <nav>
-        <ul>
-            <li>
-                <ReactRouterDOM.Link
-                    to={P.format(Router.homeMatch.formatter, {})}
-                >
-                    Home
-                </ReactRouterDOM.Link>
-            </li>
-            <li>
-                <ReactRouterDOM.Link
-                    to={P.format(Router.searchMatch.formatter, {
-                        query: "dogs and cats",
-                    })}
-                >
-                    Search
-                </ReactRouterDOM.Link>
-            </li>
-            <li>
-                <ReactRouterDOM.Link to="/abcdef">
-                    Invalid link (to test "not found")
-                </ReactRouterDOM.Link>
-            </li>
-        </ul>
-    </nav>
+  <nav>
+    <ul>
+      <li>
+        <ReactRouterDOM.Link to={P.format(Router.homeMatch.formatter, {})}>
+          Home
+        </ReactRouterDOM.Link>
+      </li>
+      <li>
+        <ReactRouterDOM.Link
+          to={P.format(Router.searchMatch.formatter, {
+            query: "dogs and cats",
+          })}
+        >
+          Search
+        </ReactRouterDOM.Link>
+      </li>
+      <li>
+        <ReactRouterDOM.Link to="/abcdef">
+          Invalid link (to test "not found")
+        </ReactRouterDOM.Link>
+      </li>
+    </ul>
+  </nav>
 );
 ```
 
