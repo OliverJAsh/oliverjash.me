@@ -7,7 +7,7 @@ import Link from "next/link";
 import { DateComponent } from "../components/DateComponent";
 import { Header } from "../components/Header";
 import { markdownTitleToMarkdownHtml } from "../helpers/markdownTitleToMarkdownHtml";
-import * as ExternalPost from "../types/ExternalPost";
+import * as External from "../types/External";
 import * as Post from "../types/Post";
 import * as TaskEither from "../types/TaskEither";
 
@@ -28,20 +28,20 @@ const getPostProps = (
     )
   );
 
-type ExternalPostProps = {
-  serialized: ExternalPost.Serialized;
+type ExternalProps = {
+  serialized: External.Serialized;
   titleHtml: string;
 };
 
-const getExternalPostProps = (
-  post: ExternalPost.T
-): TaskEither.TaskEither<unknown, ExternalPostProps> =>
+const getExternalProps = (
+  x: External.T
+): TaskEither.TaskEither<unknown, ExternalProps> =>
   pipe(
-    post.title,
+    x.title,
     markdownTitleToMarkdownHtml,
     TaskEither.map(
-      (titleHtml): ExternalPostProps => ({
-        serialized: pipe(post, ExternalPost.serialize),
+      (titleHtml): ExternalProps => ({
+        serialized: pipe(x, External.serialize),
         titleHtml,
       })
     )
@@ -49,7 +49,8 @@ const getExternalPostProps = (
 
 type Props = {
   posts: ReadonlyArray<PostProps>;
-  externalPosts: ReadonlyArray<ExternalPostProps>;
+  externalPosts: ReadonlyArray<ExternalProps>;
+  presentations: ReadonlyArray<ExternalProps>;
 };
 
 const globbyTaskFn = TaskEither.tryCatchK(globby, identity);
@@ -77,9 +78,16 @@ export const getStaticProps: GetStaticProps<Props> = () => {
   );
 
   const externalPostPropsTask = pipe(
-    ExternalPost.all,
-    RA.sort(ExternalPost.dateOrdDesc),
-    RA.map(getExternalPostProps),
+    External.posts,
+    RA.sort(External.dateOrdDesc),
+    RA.map(getExternalProps),
+    TaskEither.sequenceArray
+  );
+
+  const presentationsPropsTask = pipe(
+    External.presentations,
+    RA.sort(External.dateOrdDesc),
+    RA.map(getExternalProps),
     TaskEither.sequenceArray
   );
 
@@ -87,11 +95,13 @@ export const getStaticProps: GetStaticProps<Props> = () => {
     TaskEither.Do,
     TaskEither.bind("posts", () => postPropsTask),
     TaskEither.bind("externalPosts", () => externalPostPropsTask),
+    TaskEither.bind("presentations", () => presentationsPropsTask),
     TaskEither.map(
-      ({ posts, externalPosts }): GetStaticPropsResult<Props> => ({
+      ({ posts, externalPosts, presentations }): GetStaticPropsResult<Props> => ({
         props: {
           posts,
           externalPosts,
+          presentations,
         },
       })
     ),
@@ -99,7 +109,7 @@ export const getStaticProps: GetStaticProps<Props> = () => {
   );
 };
 
-const Home: NextPage<Props> = ({ posts, externalPosts }) => (
+const Home: NextPage<Props> = ({ posts, externalPosts, presentations }) => (
   <>
     <Head>
       <title>Oliver Joseph Ash</title>
@@ -129,12 +139,32 @@ const Home: NextPage<Props> = ({ posts, externalPosts }) => (
       </section>
 
       <section>
+        <h1>Presentations</h1>
+        <ul>
+          {pipe(
+            presentations,
+            RA.map(({ serialized, titleHtml }) => {
+              const post = External.deserialize(serialized);
+              return (
+                <li key={post.href}>
+                  <DateComponent date={post.date} />{" "}
+                  <Link href={post.href}>
+                    <a dangerouslySetInnerHTML={{ __html: titleHtml }} />
+                  </Link>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </section>
+
+      <section>
         <h1>Posts elsewhere on the internet</h1>
         <ul>
           {pipe(
             externalPosts,
             RA.map(({ serialized, titleHtml }) => {
-              const post = ExternalPost.deserialize(serialized);
+              const post = External.deserialize(serialized);
               return (
                 <li key={post.href}>
                   <DateComponent date={post.date} />{" "}

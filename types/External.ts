@@ -2,19 +2,19 @@ import * as Date from "fp-ts/Date";
 import { pipe } from "fp-ts/function";
 import * as Ord from "fp-ts/Ord";
 
-type ExternalPost = {
+type External = {
   title: string;
   href: string;
   date: Date;
 };
-export type T = ExternalPost;
+export type T = External;
 
-export const dateOrdAsc = Ord.contramap((post: ExternalPost) => post.date)(
+export const dateOrdAsc = Ord.contramap((post: External) => post.date)(
   Date.Ord
 );
 export const dateOrdDesc = pipe(dateOrdAsc, Ord.reverse);
 
-export const all: ReadonlyArray<ExternalPost> = [
+export const posts: ReadonlyArray<External> = [
   {
     title: "Calling React Hooks Conditionally/Dynamically Using Render Props",
     href: "https://unsplash.com/blog/calling-react-hooks-conditionally-dynamically-using-render-props/",
@@ -80,19 +80,38 @@ export const all: ReadonlyArray<ExternalPost> = [
   },
 ];
 
+export const presentations: ReadonlyArray<External> = [
+  {
+    title: "Localizing Unsplash.com: Using types to enforce correct translations",
+    href: "https://www.youtube.com/watch?v=wlbotUluWZ0",
+    date: new globalThis.Date(2022, 9, 1),
+  },
+  {
+    title: "Building an Offline Page for theguardian.com",
+    href: "https://www.youtube.com/watch?v=hx1fqAXXViA",
+    date: new globalThis.Date(2016, 5, 1),
+  },
+  {
+    title: "Building a CMS for the responsive web",
+    href: "https://www.youtube.com/watch?v=31EpyxcmBeU",
+    date: new globalThis.Date(2014, 7, 1),
+  },
+];
+
+
 export type Serialized = {
   href: string;
   title: string;
   date: string;
 };
 
-export const serialize = (post: ExternalPost): Serialized => ({
+export const serialize = (post: External): Serialized => ({
   href: post.href,
   title: post.title,
   date: post.date.toISOString(),
 });
 
-export const deserialize = (post: Serialized): ExternalPost => ({
+export const deserialize = (post: Serialized): External => ({
   href: post.href,
   title: post.title,
   date: new globalThis.Date(post.date),
