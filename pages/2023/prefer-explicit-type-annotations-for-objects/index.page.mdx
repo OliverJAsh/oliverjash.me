@@ -71,8 +71,8 @@ Consider this example where the `myConfig` variable has no type annotation:
 
 ```ts twoslash
 type Config = {
-  foo: string;
-  bar?: string;
+  foo?: string;
+  bar: string;
 };
 
 const updateConfig = (config: Config) => {};
@@ -89,9 +89,11 @@ Now imagine that we decide to rename the optional `foo` property in the `Config`
 
 ```ts twoslash
 type Config = {
-  fooNEW: string;
-  bar?: string;
+  fooNEW?: string;
+  bar: string;
 };
+
+const updateConfig = (config: Config) => {};
 
 // ❌ `foo` has not been renamed.
 // ❌ No type error to alert us to the problem.
@@ -99,6 +101,8 @@ const myConfig = {
   foo: "yay",
   bar: "woo",
 };
+
+updateConfig(myConfig);
 ```
 
 We probably have a bug in our code now—`myConfig` is still using the old property name (`foo`)—and there's no type error to alert us.
