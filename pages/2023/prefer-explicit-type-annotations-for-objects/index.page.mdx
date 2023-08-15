@@ -173,9 +173,9 @@ const reducer = (state: State, action: Action): State =>
   });
 ```
 
-Similar to the previous example, if rename the `foo` property in the `State` type, the objects inside `reducer` will not be updated.
+Similar to the previous example, if we rename the `foo` property in the `State` type, the objects inside `reducer` will not be updated.
 
-This is despite the fact that `reducer` does have a return type. The reason the return type isn't sufficient is because it doesn't flow through to the objects returned by `UpdateFoo` and `UpdateBar`.
+This is despite the fact that `reducer` has a return type. The reason the return type isn't sufficient is because it doesn't flow through to the objects returned by `UpdateFoo` and `UpdateBar`.
 
 ## Lint rule
 
