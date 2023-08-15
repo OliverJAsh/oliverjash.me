@@ -1,0 +1,200 @@
+---
+title: Prefer explicit type annotations for objects
+date: 2023-08-15
+---
+
+Consider this example where the `myUser` variable has no type annotation:
+
+```ts twoslash
+type User = {
+  name: string;
+  age: number;
+};
+
+const logUserName = (user: User) => {
+  console.log(user.name);
+};
+
+const myUser = {
+  name: "bob",
+  age: 123,
+};
+
+logUserName(myUser);
+```
+
+This builds with no type errors despite the fact that `myUser` has no type annotation. This is because TypeScript is a structural type system. TypeScript infers the type of the `myUser` variable and—when we try to pass that into `logUserName`—TypeScript determines that it is structurally equal to the parameter of `logUserName` which has type `User`. This convenience helps to make TypeScript easier to adopt.
+
+So, does it really matter that `myUser` is not explicitly annotated with the `User` type? At first glance, this seems fine. It looks like we still have type safety. If we add a new property to the `User` type but we forget to update `myUser`, we'll get a type error when we try to pass `myUser` into `logUserName`.
+
+However, if we dig deeper we will find a number of reasons to prefer explicit type annotations for objects.
+
+## Language server features
+
+Going back to our previous example, if you we try use TypeScript's rename feature to rename a property inside of the `User` type, TypeScript is unable to update the name of the corresponding property in the `myUser` value:
+
+```ts twoslash
+type User = {
+  fullName: string;
+  age: number;
+};
+
+const logUserName = (user: User) => {
+  console.log(user.fullName);
+};
+
+// ❌ `name` has not been renamed.
+const myUser = {
+  name: "bob",
+  age: 123,
+};
+
+// @errors: 2339 2345
+logUserName(myUser);
+```
+
+This happens because TypeScript does not understand that the object value `myUser` relates to the `User` type, because we haven't told it (i.e. the object is not annotated).
+
+As you can see above, we do get a type error when we try to pass `myUser` into `logUserName`, so we're at least reminded to update `myUser`. However, renaming is a frequent operation during refactoring, so it's preferable if renames can be fully automated, especially in large code bases where the object type may be used in many places.
+
+It is for the same reason that other language server features like "go to definition" and "find references" on object properties will also not work reliably. This makes it harder to navigate around the code, harming readability and the developer experience when debugging.
+
+## Bugs caused by excess properties
+
+Previously we observed that changes to the type resulted in a type error, which serves as a useful reminder that we need to update our values to match the new type. However, there are some cases where TypeScript is not able to do this, meaning it's possible for bugs to slip in. Specifically, this happens because excess properties are allowed for objects without type annotations.
+
+Below are some examples of different scenarios where you might encounter this.
+
+### Example with optional properties
+
+Consider this example where the `myConfig` variable has no type annotation:
+
+```ts twoslash
+type Config = {
+  foo: string;
+  bar?: string;
+};
+
+const updateConfig = (config: Config) => {};
+
+const myConfig = {
+  foo: "yay",
+  bar: "woo",
+};
+
+updateConfig(myConfig);
+```
+
+Now imagine that we decide to rename the optional `foo` property in the `Config` type using TypeScript's rename feature. Watch what happens:
+
+```ts twoslash
+type Config = {
+  fooNEW: string;
+  bar?: string;
+};
+
+// ❌ `foo` has not been renamed.
+// ❌ No type error to alert us to the problem.
+const myConfig = {
+  foo: "yay",
+  bar: "woo",
+};
+```
+
+We probably have a bug in our code now—`myConfig` is still using the old property name (`foo`)—and there's no type error to alert us.
+
+### Example with spread
+
+Consider this example where the `newState` variable has no type annotation:
+
+```ts twoslash
+type State = {
+  foo: string;
+  bar: string;
+};
+declare const state: State;
+
+const newState = {
+  ...state,
+  foo: "abc",
+};
+```
+
+Now imagine that we decide to rename the `foo` property in the `State` type using TypeScript's rename feature. Watch what happens:
+
+```ts twoslash
+type State = {
+  fooNEW: string;
+  bar: string;
+};
+declare const state: State;
+
+const newState = {
+  ...state,
+  // ❌ `foo` has not been renamed.
+  // ❌ No type error to alert us to the problem.
+  foo: "abc",
+};
+```
+
+We probably have a bug in our code now—`newState` is still using the old property name (`foo`)—and there's no type error to alert us.
+
+### A real world example
+
+Here's a reduced test case of a real bug we encountered in production at Unsplash:
+
+```ts twoslash
+type State = {
+  foo: string;
+  bar: string;
+};
+
+type Action = { tag: "UpdateFoo" } | { tag: "UpdateBar" };
+
+declare const matchAction: <T>(
+  action: Action,
+  matchers: Record<Action["tag"], () => T>
+) => T;
+
+const reducer = (state: State, action: Action): State =>
+  matchAction(action, {
+    UpdateFoo: () => ({
+      ...state,
+      foo: "abc",
+    }),
+    UpdateBar: () => ({
+      ...state,
+      bar: "abc",
+    }),
+  });
+```
+
+Similar to the previous example, if rename the `foo` property in the `State` type, the objects inside `reducer` will not be updated.
+
+This is despite the fact that `reducer` does have return type. The reason the return type isn't sufficient is because it doesn't flow through to the objects returned by `UpdateFoo` and `UpdateBar`.
+
+## Lint rule
+
+To enforce type annotations for all objects, we wrote a lint rule for use at Unsplash: [`require-object-type-annotations`](https://github.com/unsplash/eslint-plugin-require-object-type-annotations). This lint rule uses type information to determine whether a given `ObjectExpression` node has a contextual type. We've been using this lint rule at Unsplash to great success. It's not perfect—there are some false negatives (see the skipped tests)—but it is able to catch the majority of instances.
+
+I attempted to contribute this lint rule to `@typescript-eslint` ([WIP PR](https://github.com/typescript-eslint/typescript-eslint/pull/5666)) but unfortunately it got stuck due to concerns about performance caused by the rule's usage of type information. There's a suggestion that it might be possible to implement this lint rule without type information, but I worry this would have too many false negatives. I'm hopeful that someone can prove me wrong. In any case, whilst this lint rule is expensive, it hasn't caused any problems for us at Unsplash (in a very large codebase). It's a cost we're willing to pay.
+
+### Objects without types
+
+In some cases we don't want to define a type for an object, because the object is very briefly used or because we want to derive the type from the object value. For example:
+
+```ts twoslash
+const routes = {
+  Home: "/home",
+  About: "/about",
+  UserProfile: "/@:username",
+};
+
+const handleRequest = (pathPattern: string) => {};
+
+handleRequest(routes.Home);
+```
+
+In this example, language server features (like "go to definition", "find references" and "rename") still work on the object properties.
+
+To accommodate for this we can conditionally disable the lint rule. In our experience at Unsplash, this represents a small minority of objects. Most of the time we are defining types upfront so this is not much of an issue, but your milage may vary.
